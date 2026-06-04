@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Hospitality</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #f4f5f7;
+            --text-color: #333;
+            --border-color: #ccc;
+            --pool-bg: #fff;
+            --table-bg: #fff;
+            --primary: #2563eb;
+            --hover: #e5e7eb;
+        }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        header { background: var(--primary); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 10; }
+        .day-selector button { background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 16px; margin: 0 5px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        .day-selector button.active { background: white; color: var(--primary); }
+        
+        .settings-panel { background: #e2e8f0; padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 25px; align-items: center; border-bottom: 1px solid var(--border-color); font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); z-index: 5; }
+        .setting-group { display: flex; align-items: center; gap: 8px; }
+        .setting-group label { font-weight: 600; color: #475569; }
+        .setting-group input[type="text"] { width: 250px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 4px; }
+        .setting-group input[type="number"] { width: 60px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 4px; }
+        .setting-group input[type="file"] { font-size: 13px; max-width: 250px; }
+        .btn-apply { background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        .btn-apply:hover { background: #0f172a; }
+
+        .main-container { display: flex; flex: 1; overflow: hidden; }
+        .guest-pool { width: 300px; background: var(--pool-bg); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
+        .guest-pool h3 { padding: 15px; margin: 0; border-bottom: 1px solid var(--border-color); background: #f8fafc; font-size: 16px; }
+        .guest-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .guest { background: white; border: 1px solid var(--border-color); padding: 8px 12px; margin-bottom: 8px; border-radius: 4px; cursor: grab; font-size: 13px; display: flex; flex-direction: column; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+        .guest.dragging { opacity: 0.5; }
+        .guest-name { font-weight: bold; margin-bottom: 4px; }
+        .sponsor-badge { font-size: 10px; padding: 2px 6px; border-radius: 10px; color: white; display: inline-block; align-self: flex-start; }
+        
+        .shifts-container { flex: 1; overflow-y: auto; padding: 20px; }
+        .shift-tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid var(--border-color); }
+        .shift-tab { padding: 10px 20px; cursor: pointer; font-weight: bold; color: #666; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+        .shift-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+        .shift-tab:hover:not(.active) { color: #333; border-bottom-color: #cbd5e1; }
+        
+        .shift-content { display: none; }
+        .shift-content.active { display: block; }
+        
+        .tables-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+        .table { background: var(--table-bg); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .table-header { background: #e2e8f0; padding: 10px; text-align: center; font-weight: bold; font-size: 14px; }
+        .seats { padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .seat { height: 80px; border: 2px dashed #cbd5e1; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #94a3b8; transition: all 0.2s; }
+        .seat.drag-over { background: #e0f2fe; border-color: #38bdf8; border-style: solid; }
+        .seat .guest { margin: 0; width: 100%; height: 100%; box-sizing: border-box; justify-content: center; cursor: grab; }
+        .seat .guest .sponsor-badge { display: none; }
+        .seat .guest .guest-name { font-size: 11px; text-align: center; word-break: break-word; }
+        .seat-badge-indicator { width: 12px; height: 12px; border-radius: 50%; margin: 0 auto 4px auto; }
+        .empty-state { padding: 20px; text-align: center; color: #64748b; font-style: italic; font-size: 13px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div>
+            <h2 style="margin: 0 0 5px 0;">Gestión Hospitality</h2>
+            <div style="font-size: 12px; opacity: 0.9;">Arrastra los invitados a las mesas</div>
+        </div>
+        <div class="day-selector">
+            <button id="btn-ven" class="active" onclick="setDay('ven')">Viernes</button>
+            <button id="btn-sab" onclick="setDay('sab')">Sábado</button>
+            <button id="btn-dom" onclick="setDay('dom')">Domingo</button>
+        </div>
+    </header>
+
+    <div class="settings-panel">
+        <div class="setting-group">
+            <label>1. Lista Invitados (XLSX o CSV):</label>
+            <input type="file" id="file-upload" accept=".xlsx, .xls, .csv" onchange="loadFile(event)">
+        </div>
+        <div class="setting-group">
+            <label>2. Layout:</label>
+            <input type="number" id="input-tables" value="11" min="1" title="Número de Mesas"> mesas
+        </div>
+        <div class="setting-group">
+            <label>Turnos:</label>
+            <input type="text" id="input-shifts" value="11:45, 12:30, 13:15, 14:00" title="Horarios separados por comas">
+        </div>
+        <button class="btn-apply" onclick="applySettings()">Actualizar Configuración</button>
+    </div>
+
+    <div class="main-container">
+        <div class="guest-pool">
+            <h3>Sin Asignar (<span id="unassigned-count">0</span>)</h3>
+            <div class="guest-list" id="pool-list" ondragover="allowDrop(event)" ondrop="dropToPool(event)"></div>
+        </div>
+        <div class="shifts-container">
+            <div class="shift-tabs" id="shift-tabs-container"></div>
+            <div id="shifts-wrapper"></div>
+        </div>
+    </div>
+
+    <script>
+        let guests = [];
+        let sponsors = [];
+        let sponsorColors = {};
+        let shifts = [];
+        let numTables = 11;
+        const seatsPerTable = 4;
+        let currentDay = 'ven';
+        let currentShift = '';
+        let assignments = { 'ven': {}, 'sab': {}, 'dom': {} };
+
+        const colors = [
+            '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e', 
+            '#10b981', '#14b8a6', '#06b6d4', '#0ea5e9', '#3b82f6',
+            '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899',
+            '#f43f5e', '#dc2626', '#ea580c', '#d97706', '#65a30d',
+            '#16a34a', '#059669', '#0d9488', '#0891b2'
+        ];
+
+        function parseCSV(csvText) {
+            let lines = csvText.split(/\r?\n/);
+            let result = [];
+            for(let line of lines) {
+                if(line.trim() === '') continue;
+                let row = [];
+                let inQuotes = false;
+                let current = '';
+                for(let i = 0; i < line.length; i++){
+                    let char = line[i];
+                    if(char === '"') { inQuotes = !inQuotes; }
+                    else if(char === ',' && !inQuotes) { row.push(current); current = ''; }
+                    else { current += char; }
+                }
+                row.push(current);
+                result.push(row);
+            }
+            return result;
+        }
+
+        function loadFile(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+
+            const ext = file.name.split('.').pop().toLowerCase();
+
+            if (ext === 'csv') {
+                const reader = new FileReader();
+                reader.onload = function(evt) { processData(parseCSV(evt.target.result)); };
+                reader.readAsText(file);
+            } else if (ext === 'xlsx' || ext === 'xls') {
+                if (typeof XLSX === 'undefined') {
+                    alert("⚠️ No se puede cargar la librería de Excel. Carga el archivo en formato CSV.");
+                    return;
+                }
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    const data = new Uint8Array(evt.target.result);
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet, {header: 1, defval: ""});
+                    processData(jsonData);
+                };
+                reader.readAsArrayBuffer(file);
+            }
+        }
+
+        // --- CEREBRO ACTUALIZADO PARA LEER EL EXCEL ---
+        function processData(data) {
+            let headerRowIndex = -1;
+            
+            for (let i = 0; i < data.length; i++) {
+                if (Array.isArray(data[i]) && data[i].some(col => col && (col.toString().toUpperCase().includes("SPONSOR") || col.toString().toUpperCase().includes("OSPITE VEN")))) {
+                    headerRowIndex = i;
+                    break;
+                }
+            }
+
+            if(headerRowIndex === -1) {
+                alert("No se encontró la cabecera de SPONSOR o OSPITE en el documento.");
+                return;
+            }
+
+            const headers = data[headerRowIndex].map(h => h ? h.toString().toUpperCase().trim() : '');
+            const rows = data.slice(headerRowIndex + 1);
+            
+            guests = [];
+            let idCounter = 1;
+            let foundSponsors = new Set();
+            
+            // MEMORIA DE SPONSOR (Soluciona las celdas combinadas de Excel)
+            let currentSponsor = 'GENERAL';
+            
+            rows.forEach(row => {
+                let obj = {};
+                let rowSponsor = '';
+                
+                headers.forEach((header, index) => {
+                    if(!header) return;
+                    const val = row[index] !== undefined && row[index] !== null ? row[index].toString().trim() : '';
+                    obj[header] = val;
+                    
+                    if (header.includes('SPONSOR') && val !== '') {
+                        rowSponsor = val;
+                    }
+                });
+
+                // Evitar procesar filas que estén completamente vacías
+                if (Object.values(obj).every(v => v === '')) return;
+
+                if (rowSponsor !== '') {
+                    currentSponsor = rowSponsor;
+                }
+                let sponsor = currentSponsor;
+
+                // Buscar en cualquier columna que pueda contener un nombre de invitado
+                const nameCols = headers.filter(h => 
+                    h.includes('OSPITE') || h.includes('GUEST') || 
+                    h.includes('WEEKEND') || h.includes('PERMANENTI') || 
+                    h.includes('NAME') || h.includes('NOMBRE')
+                );
+
+                const isPresent = (val) => val === '1' || val === '1.0' || val.toLowerCase() === 'x' || val.toLowerCase() === 'v' || val.toLowerCase() === 'si' || val.toLowerCase() === 'yes';
+                
+                nameCols.forEach(col => {
+                    const val = obj[col];
+                    // Validar que realmente sea un nombre y no una "x" de check
+                    if (val && val !== '1' && val !== '0' && val.toLowerCase() !== 'x' && val.toLowerCase() !== 'v' && val.length > 1) {
+                        let specificDias = new Set();
+                        
+                        // Inferir el día según la columna donde esté el nombre
+                        if (col.includes('VEN')) specificDias.add('ven');
+                        if (col.includes('SAB')) specificDias.add('sab');
+                        if (col.includes('DOM')) specificDias.add('dom');
+                        
+                        // Si la columna es "Weekend", darle los 3 días solo si no tiene marcas específicas
+                        if (col.includes('WEEKEND') || col.includes('PERMANENTI')) { 
+                            if (!isPresent(obj['VEN']) && !isPresent(obj['SAB']) && !isPresent(obj['DOM'])) {
+                                specificDias.add('ven'); specificDias.add('sab'); specificDias.add('dom');
+                            }
+                        }
+                        
+                        // Sumar días explícitos marcados en las columnas "ven", "sab", "dom"
+                        if (isPresent(obj['VEN'])) specificDias.add('ven');
+                        if (isPresent(obj['SAB'])) specificDias.add('sab');
+                        if (isPresent(obj['DOM'])) specificDias.add('dom');
+
+                        // Si por algún motivo no tiene días, le damos todos por defecto
+                        if (specificDias.size === 0) {
+                            specificDias.add('ven'); specificDias.add('sab'); specificDias.add('dom');
+                        }
+
+                        foundSponsors.add(sponsor);
+                        guests.push({
+                            id: 'g_' + idCounter++,
+                            name: val,
+                            sponsor: sponsor,
+                            days: Array.from(specificDias)
+                        });
+                    }
+                });
+            });
+
+            sponsors = Array.from(foundSponsors);
+            sponsorColors = {};
+            sponsors.forEach((sp, i) => { sponsorColors[sp] = colors[i % colors.length]; });
+
+            applySettings(true);
+        }
+
+        function applySettings(force = false) {
+            if (!force && guests.length > 0) {
+                if (!confirm("Al actualizar la estructura se reiniciarán las asignaciones actuales. ¿Continuar?")) return;
+            }
+
+            numTables = parseInt(document.getElementById('input-tables').value);
+            const shiftsStr = document.getElementById('input-shifts').value;
+            const shiftTimes = shiftsStr.split(',').map(s => s.trim()).filter(s => s);
+            
+            shifts = shiftTimes.map((time, idx) => ({ id: 's' + (idx + 1), time: time }));
+            
+            assignments = { 'ven': {}, 'sab': {}, 'dom': {} };
+            ['ven', 'sab', 'dom'].forEach(day => {
+                shifts.forEach(shift => { assignments[day][shift.id] = {}; });
+            });
+
+            renderShiftTabs();
+            renderShifts();
+            
+            if (shifts.length > 0) setShift(shifts[0].id);
+            
+            renderApp();
+        }
+
+        function setDay(day) {
+            currentDay = day;
+            document.querySelectorAll('.day-selector button').forEach(b => b.classList.remove('active'));
+            document.getElementById('btn-' + day).classList.add('active');
+            renderApp();
+        }
+
+        function setShift(shiftId) {
+            if(!shiftId) return;
+            currentShift = shiftId;
+            document.querySelectorAll('.shift-tab').forEach(tab => {
+                if (tab.dataset.shiftId === shiftId) tab.classList.add('active');
+                else tab.classList.remove('active');
+            });
+            document.querySelectorAll('.shift-content').forEach(content => {
+                if (content.id === 'content-' + shiftId) content.classList.add('active');
+                else content.classList.remove('active');
+            });
+        }
+
+        function renderShiftTabs() {
+            const tabsContainer = document.getElementById('shift-tabs-container');
+            tabsContainer.innerHTML = '';
+            shifts.forEach((shift, index) => {
+                const tab = document.createElement('div');
+                tab.className = 'shift-tab ' + (index === 0 ? 'active' : '');
+                tab.dataset.shiftId = shift.id;
+                tab.onclick = () => setShift(shift.id);
+                tab.innerText = shift.time;
+                tabsContainer.appendChild(tab);
+            });
+        }
+
+        function renderShifts() {
+            const wrapper = document.getElementById('shifts-wrapper');
+            wrapper.innerHTML = '';
+            shifts.forEach((shift, index) => {
+                const content = document.createElement('div');
+                content.className = 'shift-content ' + (index === 0 ? 'active' : '');
+                content.id = 'content-' + shift.id;
+                
+                const grid = document.createElement('div');
+                grid.className = 'tables-grid';
+                
+                for (let t = 1; t <= numTables; t++) {
+                    const tableDiv = document.createElement('div');
+                    tableDiv.className = 'table';
+                    tableDiv.innerHTML = `<div class="table-header">Mesa ${t}</div>`;
+                    
+                    const seatsDiv = document.createElement('div');
+                    seatsDiv.className = 'seats';
+                    
+                    for (let s = 1; s <= seatsPerTable; s++) {
+                        const seatId = t + '_' + s;
+                        const seatDiv = document.createElement('div');
+                        seatDiv.className = 'seat';
+                        seatDiv.id = 'seat_' + shift.id + '_' + seatId;
+                        seatDiv.dataset.shift = shift.id;
+                        seatDiv.dataset.seatId = seatId;
+                        seatDiv.ondragover = allowDrop;
+                        seatDiv.ondragenter = dragEnter;
+                        seatDiv.ondragleave = dragLeave;
+                        seatDiv.ondrop = drop;
+                        seatsDiv.appendChild(seatDiv);
+                    }
+                    tableDiv.appendChild(seatsDiv);
+                    grid.appendChild(tableDiv);
+                }
+                content.appendChild(grid);
+                wrapper.appendChild(content);
+            });
+        }
+
+        function renderApp() {
+            const poolList = document.getElementById('pool-list');
+            poolList.innerHTML = '';
+            
+            if (guests.length === 0) {
+                poolList.innerHTML = '<div class="empty-state">Sube un Excel (.xlsx) o un CSV para organizar las mesas.</div>';
+                document.getElementById('unassigned-count').innerText = 0;
+            } else {
+                const dayGuests = guests.filter(g => g.days.includes(currentDay) || g.days.length === 0);
+                const dayAssignments = assignments[currentDay];
+                const assignedGuestIds = new Set();
+                
+                if (dayAssignments) {
+                    Object.keys(dayAssignments).forEach(shiftId => {
+                        Object.values(dayAssignments[shiftId]).forEach(guestId => { assignedGuestIds.add(guestId); });
+                    });
+                }
+                
+                let unassignedCount = 0;
+                dayGuests.forEach(guest => {
+                    if (!assignedGuestIds.has(guest.id)) {
+                        poolList.appendChild(createGuestElement(guest));
+                        unassignedCount++;
+                    }
+                });
+                document.getElementById('unassigned-count').innerText = unassignedCount;
+            }
+            
+            shifts.forEach(shift => {
+                for (let t = 1; t <= numTables; t++) {
+                    for (let s = 1; s <= seatsPerTable; s++) {
+                        const seatId = t + '_' + s;
+                        const seatDivId = 'seat_' + shift.id + '_' + seatId;
+                        const seatDiv = document.getElementById(seatDivId);
+                        
+                        if (seatDiv) {
+                            seatDiv.innerHTML = '';
+                            seatDiv.innerText = 'Silla ' + s;
+                            
+                            const guestId = assignments[currentDay][shift.id][seatId];
+                            if (guestId) {
+                                const guest = guests.find(g => g.id === guestId);
+                                if (guest) {
+                                    seatDiv.innerHTML = ''; 
+                                    seatDiv.appendChild(createGuestElement(guest, true));
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createGuestElement(guest, isSmall = false) {
+            const div = document.createElement('div');
+            div.className = 'guest';
+            div.id = 'el_' + guest.id;
+            div.draggable = true;
+            div.ondragstart = dragStart;
+            div.ondragend = dragEnd;
+            div.dataset.guestId = guest.id;
+            
+            const color = sponsorColors[guest.sponsor] || '#999';
+            
+            if (isSmall) {
+                div.innerHTML = `<div class="seat-badge-indicator" style="background-color: ${color};" title="${guest.sponsor}"></div>
+                                 <div class="guest-name">${guest.name}</div>`;
+            } else {
+                div.innerHTML = `<div class="guest-name">${guest.name}</div>
+                                 <div class="sponsor-badge" style="background-color: ${color};">${guest.sponsor}</div>`;
+            }
+            return div;
+        }
+
+        let draggedGuestId = null;
+        let sourceLocation = null;
+
+        function dragStart(e) {
+            draggedGuestId = e.target.dataset.guestId;
+            e.target.classList.add('dragging');
+            
+            const parentId = e.target.parentElement.id;
+            if (parentId === 'pool-list') { sourceLocation = 'pool'; } 
+            else {
+                const parts = parentId.split('_');
+                sourceLocation = { shift: parts[1], seatId: parts[2] + '_' + parts[3] };
+            }
+            e.dataTransfer.effectAllowed = 'move';
+        }
+
+        function dragEnd(e) {
+            e.target.classList.remove('dragging');
+            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+        }
+
+        function allowDrop(e) { e.preventDefault(); }
+        
+        function dragEnter(e) {
+            e.preventDefault();
+            const seat = e.target.closest('.seat');
+            if (seat) seat.classList.add('drag-over');
+        }
+        
+        function dragLeave(e) {
+            const seat = e.target.closest('.seat');
+            if (seat) seat.classList.remove('drag-over');
+        }
+
+        function drop(e) {
+            e.preventDefault();
+            const seat = e.target.closest('.seat');
+            if (!seat) return;
+            
+            seat.classList.remove('drag-over');
+            
+            const targetShift = seat.dataset.shift;
+            const targetSeatId = seat.dataset.seatId;
+            
+            if (sourceLocation !== 'pool') {
+                delete assignments[currentDay][sourceLocation.shift][sourceLocation.seatId];
+            }
+            
+            assignments[currentDay][targetShift][targetSeatId] = draggedGuestId;
+            
+            Object.keys(assignments[currentDay]).forEach(sId => {
+                if (sId !== targetShift) {
+                    Object.keys(assignments[currentDay][sId]).forEach(seatKey => {
+                        if (assignments[currentDay][sId][seatKey] === draggedGuestId) {
+                            delete assignments[currentDay][sId][seatKey];
+                        }
+                    });
+                }
+            });
+            
+            renderApp();
+        }
+        
+        function dropToPool(e) {
+            e.preventDefault();
+            if (sourceLocation !== 'pool') {
+                delete assignments[currentDay][sourceLocation.shift][sourceLocation.seatId];
+                renderApp();
+            }
+        }
+
+        window.onload = function() { applySettings(true); };
+    </script>
+</body>
+</html>
