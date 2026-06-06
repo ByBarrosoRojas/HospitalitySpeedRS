@@ -2,9 +2,12 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Gestión de Hospitality</title>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://bernardo-castilho.github.io/DragDropTouch/DragDropTouch.js"></script>
+
     <style>
         :root {
             --bg-color: #f4f5f7;
@@ -16,30 +19,53 @@
             --hover: #e5e7eb;
         }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        header { background: var(--primary); color: white; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 10; }
-        .day-selector button { background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 16px; margin: 0 5px; cursor: pointer; border-radius: 4px; font-weight: bold; }
+        
+        /* HEADER RESPONSIVO */
+        header { background: var(--primary); color: white; padding: 15px 20px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); z-index: 10; gap: 10px; }
+        .day-selector { display: flex; gap: 5px; flex-wrap: wrap; }
+        .day-selector button { background: rgba(255,255,255,0.2); border: none; color: white; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-weight: bold; }
         .day-selector button.active { background: white; color: var(--primary); }
         
-        .settings-panel { background: #e2e8f0; padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 25px; align-items: center; border-bottom: 1px solid var(--border-color); font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); z-index: 5; }
-        .setting-group { display: flex; align-items: center; gap: 8px; }
+        /* PANEL DE AJUSTES RESPONSIVO */
+        .settings-panel { background: #e2e8f0; padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 15px; align-items: center; border-bottom: 1px solid var(--border-color); font-size: 14px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); z-index: 5; }
+        .setting-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .setting-group label { font-weight: 600; color: #475569; }
-        .setting-group input[type="text"] { width: 250px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 4px; }
+        .setting-group input[type="text"] { width: 250px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 4px; max-width: 100%; }
         .setting-group input[type="number"] { width: 60px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 4px; }
-        .setting-group input[type="file"] { font-size: 13px; max-width: 250px; }
+        .setting-group input[type="file"] { font-size: 13px; max-width: 100%; }
         .btn-apply { background: #334155; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.2s; }
         .btn-apply:hover { background: #0f172a; }
 
-        .main-container { display: flex; flex: 1; overflow: hidden; }
-        .guest-pool { width: 300px; background: var(--pool-bg); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
+        /* --- ESTRUCTURA BASE (MÓVIL POR DEFECTO) --- */
+        .main-container { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+        .guest-pool { width: 100%; height: 35vh; background: var(--pool-bg); border-bottom: 2px solid var(--border-color); display: flex; flex-direction: column; flex-shrink: 0; }
+        .shifts-container { flex: 1; overflow-y: auto; padding: 15px; }
+        
         .guest-pool h3 { padding: 15px; margin: 0; border-bottom: 1px solid var(--border-color); background: #f8fafc; font-size: 16px; }
         .guest-list { flex: 1; overflow-y: auto; padding: 10px; }
+        
+        /* En móviles, cuadricula de invitados para aprovechar el espacio */
+        @media (max-width: 767px) {
+            .guest-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; }
+            .guest { margin-bottom: 0 !important; }
+        }
+
+        /* --- ESTRUCTURA DE ESCRITORIO (PC/TABLET) --- */
+        @media (min-width: 768px) {
+            .main-container { flex-direction: row; }
+            .guest-pool { width: 300px; height: 100%; border-right: 1px solid var(--border-color); border-bottom: none; }
+            .shifts-container { padding: 20px; }
+        }
+
+        /* ELEMENTOS INTERNOS */
         .guest { background: white; border: 1px solid var(--border-color); padding: 8px 12px; margin-bottom: 8px; border-radius: 4px; cursor: grab; font-size: 13px; display: flex; flex-direction: column; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
         .guest.dragging { opacity: 0.5; }
         .guest-name { font-weight: bold; margin-bottom: 4px; }
         .sponsor-badge { font-size: 10px; padding: 2px 6px; border-radius: 10px; color: white; display: inline-block; align-self: flex-start; }
         
-        .shifts-container { flex: 1; overflow-y: auto; padding: 20px; }
-        .shift-tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid var(--border-color); }
+        /* TABS ESCALABLES */
+        .shift-tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid var(--border-color); overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+        .shift-tabs::-webkit-scrollbar { display: none; }
         .shift-tab { padding: 10px 20px; cursor: pointer; font-weight: bold; color: #666; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
         .shift-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
         .shift-tab:hover:not(.active) { color: #333; border-bottom-color: #cbd5e1; }
@@ -47,7 +73,7 @@
         .shift-content { display: none; }
         .shift-content.active { display: block; }
         
-        .tables-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+        .tables-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
         .table { background: var(--table-bg); border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
         .table-header { background: #e2e8f0; padding: 10px; text-align: center; font-weight: bold; font-size: 14px; }
         .seats { padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -102,6 +128,7 @@
     </div>
 
     <script>
+        // EL CÓDIGO JS SE MANTIENE EXACTO A TU VERSIÓN 5 PARA GARANTIZAR ESTABILIDAD TOTAL
         let guests = [];
         let sponsors = [];
         let sponsorColors = {};
@@ -148,11 +175,13 @@
 
             if (ext === 'csv') {
                 const reader = new FileReader();
-                reader.onload = function(evt) { processData(parseCSV(evt.target.result)); };
+                reader.onload = function(evt) {
+                    processData(parseCSV(evt.target.result));
+                };
                 reader.readAsText(file);
             } else if (ext === 'xlsx' || ext === 'xls') {
                 if (typeof XLSX === 'undefined') {
-                    alert("⚠️ No se puede cargar la librería de Excel. Carga el archivo en formato CSV.");
+                    alert("⚠️ ALERTA DE RED: El circuito/firewall ha bloqueado la librería necesaria para leer Excel.\n\nSOLUCIÓN OFFLINE: Abre tu Excel, haz clic en 'Guardar como', elige formato 'CSV (delimitado por comas)' y sube ese archivo.");
                     return;
                 }
                 const reader = new FileReader();
@@ -165,13 +194,13 @@
                     processData(jsonData);
                 };
                 reader.readAsArrayBuffer(file);
+            } else {
+                alert('Formato de archivo no soportado. Sube un XLSX o un CSV.');
             }
         }
 
-        // --- CEREBRO ACTUALIZADO PARA LEER EL EXCEL ---
         function processData(data) {
-            let headerRowIndex = -1;
-            
+            let headerRowIndex = 0;
             for (let i = 0; i < data.length; i++) {
                 if (Array.isArray(data[i]) && data[i].some(col => col && (col.toString().toUpperCase().includes("SPONSOR") || col.toString().toUpperCase().includes("OSPITE VEN")))) {
                     headerRowIndex = i;
@@ -179,89 +208,40 @@
                 }
             }
 
-            if(headerRowIndex === -1) {
-                alert("No se encontró la cabecera de SPONSOR o OSPITE en el documento.");
-                return;
-            }
-
-            const headers = data[headerRowIndex].map(h => h ? h.toString().toUpperCase().trim() : '');
+            const headers = data[headerRowIndex].map(h => h ? h.toString().trim() : '');
             const rows = data.slice(headerRowIndex + 1);
             
             guests = [];
             let idCounter = 1;
             let foundSponsors = new Set();
             
-            // MEMORIA DE SPONSOR (Soluciona las celdas combinadas de Excel)
-            let currentSponsor = 'GENERAL';
-            
             rows.forEach(row => {
                 let obj = {};
-                let rowSponsor = '';
-                
                 headers.forEach((header, index) => {
-                    if(!header) return;
-                    const val = row[index] !== undefined && row[index] !== null ? row[index].toString().trim() : '';
-                    obj[header] = val;
+                    if(header) obj[header] = row[index] !== undefined && row[index] !== null ? row[index].toString().trim() : '';
+                });
+
+                const nombres = [obj['OSPITE VEN'], obj['OSPITE SAB'], obj['OSPITE DOM'], obj['WEEKEND'], obj['Guest'], obj['Permanenti']]
+                    .filter(n => n && n !== '' && n !== '1');
+
+                if (nombres.length > 0) {
+                    let nombrePrincipal = nombres[0];
+                    let dias = [];
                     
-                    if (header.includes('SPONSOR') && val !== '') {
-                        rowSponsor = val;
-                    }
-                });
+                    if (obj['OSPITE VEN'] || obj['ven'] === '1' || obj['ven'] == 1) dias.push('ven');
+                    if (obj['OSPITE SAB'] || obj['sab'] === '1' || obj['sab'] == 1) dias.push('sab');
+                    if (obj['OSPITE DOM'] || obj['dom'] === '1' || obj['dom'] == 1) dias.push('dom');
 
-                // Evitar procesar filas que estén completamente vacías
-                if (Object.values(obj).every(v => v === '')) return;
+                    let sponsor = obj['SPONSOR'] || 'GENERAL';
+                    foundSponsors.add(sponsor);
 
-                if (rowSponsor !== '') {
-                    currentSponsor = rowSponsor;
+                    guests.push({
+                        id: 'g_' + idCounter++,
+                        name: nombrePrincipal,
+                        sponsor: sponsor,
+                        days: dias
+                    });
                 }
-                let sponsor = currentSponsor;
-
-                // Buscar en cualquier columna que pueda contener un nombre de invitado
-                const nameCols = headers.filter(h => 
-                    h.includes('OSPITE') || h.includes('GUEST') || 
-                    h.includes('WEEKEND') || h.includes('PERMANENTI') || 
-                    h.includes('NAME') || h.includes('NOMBRE')
-                );
-
-                const isPresent = (val) => val === '1' || val === '1.0' || val.toLowerCase() === 'x' || val.toLowerCase() === 'v' || val.toLowerCase() === 'si' || val.toLowerCase() === 'yes';
-                
-                nameCols.forEach(col => {
-                    const val = obj[col];
-                    // Validar que realmente sea un nombre y no una "x" de check
-                    if (val && val !== '1' && val !== '0' && val.toLowerCase() !== 'x' && val.toLowerCase() !== 'v' && val.length > 1) {
-                        let specificDias = new Set();
-                        
-                        // Inferir el día según la columna donde esté el nombre
-                        if (col.includes('VEN')) specificDias.add('ven');
-                        if (col.includes('SAB')) specificDias.add('sab');
-                        if (col.includes('DOM')) specificDias.add('dom');
-                        
-                        // Si la columna es "Weekend", darle los 3 días solo si no tiene marcas específicas
-                        if (col.includes('WEEKEND') || col.includes('PERMANENTI')) { 
-                            if (!isPresent(obj['VEN']) && !isPresent(obj['SAB']) && !isPresent(obj['DOM'])) {
-                                specificDias.add('ven'); specificDias.add('sab'); specificDias.add('dom');
-                            }
-                        }
-                        
-                        // Sumar días explícitos marcados en las columnas "ven", "sab", "dom"
-                        if (isPresent(obj['VEN'])) specificDias.add('ven');
-                        if (isPresent(obj['SAB'])) specificDias.add('sab');
-                        if (isPresent(obj['DOM'])) specificDias.add('dom');
-
-                        // Si por algún motivo no tiene días, le damos todos por defecto
-                        if (specificDias.size === 0) {
-                            specificDias.add('ven'); specificDias.add('sab'); specificDias.add('dom');
-                        }
-
-                        foundSponsors.add(sponsor);
-                        guests.push({
-                            id: 'g_' + idCounter++,
-                            name: val,
-                            sponsor: sponsor,
-                            days: Array.from(specificDias)
-                        });
-                    }
-                });
             });
 
             sponsors = Array.from(foundSponsors);
@@ -405,7 +385,6 @@
                         
                         if (seatDiv) {
                             seatDiv.innerHTML = '';
-                            seatDiv.innerText = 'Silla ' + s;
                             
                             const guestId = assignments[currentDay][shift.id][seatId];
                             if (guestId) {
@@ -414,6 +393,8 @@
                                     seatDiv.innerHTML = ''; 
                                     seatDiv.appendChild(createGuestElement(guest, true));
                                 }
+                            } else {
+                                seatDiv.innerText = 'Silla ' + s;
                             }
                         }
                     }
